@@ -143,4 +143,12 @@ This project is not about generating outputs.
 It is about verifying them.
 
 If LLMs are probabilistic,
-your trust layer must not be.
+
+## v0.2.0-pre: proof container + receipt_hash
+
+Responses now include:
+
+- `proof`: reserved for future attestations (timestamp / transparency log / on-chain anchor)
+- `meta.receipt_hash`: `sha256(canonical(sig_payload) + "." + sig)`
+
+This allows attaching future proofs without changing the original signed receipt.

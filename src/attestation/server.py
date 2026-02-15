@@ -6,6 +6,9 @@ from pydantic import BaseModel
 from .node import AttestationNode
 from .crypto import Ed25519Signer
 from .store import ReceiptStore
+from .canonical_json import CanonicalJson
+import hashlib
+import time
 
 # --- Configuration ---
 KEYS_DIR = ".keys"
@@ -17,12 +20,23 @@ NODE_ID = os.getenv("NODE_ID", "default-node")
 # --- Application ---
 app = FastAPI(
     title="Deterministic Attestation Node",
-    version="0.1.0",
+    version="0.2.0-pre",
     description="A trust layer for AI agents, providing generic verifiable receipts."
 )
 
 # --- State ---
 node: Optional[AttestationNode] = None
+
+# --- Helpers ---
+def receipt_hash(sig_payload_obj: dict, sig_hex: str) -> str:
+    """
+    Computes a deterministic hash of the receipt for future proof framing.
+    Hash = SHA256( canonical(sig_payload) + "." + sig )
+    """
+    # IMPORTANT: must match canonicalization rules used everywhere else
+    sig_payload_canon = CanonicalJson.dumps(sig_payload_obj)
+    s = f"{sig_payload_canon}.{sig_hex}".encode("utf-8")
+    return hashlib.sha256(s).hexdigest()
 
 # --- Models ---
 class AttestRequest(BaseModel):
@@ -30,15 +44,27 @@ class AttestRequest(BaseModel):
     input: Dict[str, Any]
     rules: Optional[Dict[str, Any]] = {}
 
-class ReceiptResponse(BaseModel):
+class ReceiptModel(BaseModel):
     task_id: str
     node_id: str
     validator_passed: bool
     signature: str
     sig_payload: str
-    # We include other fields as convenience
     created_at: int
     validator_errors: List[str]
+
+class ReceiptMeta(BaseModel):
+    request_id: str
+    cached: bool
+    ts: int
+    processing_time_ms: int
+    receipt_hash: str
+    protocol: str = "AttestGrid/v0.2.0-pre"
+
+class AttestationResponse(BaseModel):
+    receipt: ReceiptModel
+    proof: Optional[Dict[str, Any]] = None
+    meta: ReceiptMeta
 
 # --- Startup ---
 @app.on_event("startup")
@@ -85,29 +111,50 @@ async def get_public_key():
     with open(PUBLIC_KEY_FILE, "r") as f:
         return {"public_key_hex": f.read().strip()}
 
-@app.post("/v1/attest", response_model=ReceiptResponse)
+@app.post("/v1/attest", response_model=AttestationResponse)
 async def attest(req: AttestRequest):
     """
     Attest to a task execution options.
-    For v0, this acts as a 'validator node' where the execution
-    is a pass-through (identity function) of the input.
+    Returns { receipt, proof, meta } structure.
     """
     if not node:
         raise HTTPException(status_code=503, detail="Node not initialized")
     
+    start = time.perf_counter()
+    request_id = hashlib.sha256(f"{req.task_id}-{time.time()}".encode()).hexdigest()[:8]
+
     # v0: Pass-through execution (Identity)
-    # The 'result' is the 'input' itself, validated against 'rules'.
     def run_fn(data):
         return data
 
     try:
-        receipt = node.attest(
+        # Check cache logic if needed, but AttestationNode handles idempotency via store.
+        receipt_dict = node.attest(
             task_id=req.task_id,
             input_data=req.input,
             rules=req.rules,
             run_fn=run_fn
         )
-        return receipt
+        
+        # Parse payload to get object for hashing
+        # receipt_dict["sig_payload"] is a STRING (JSON).
+        # We need the OBJECT for receipt_hash(sig_payload_obj, ...).
+        sig_payload_obj = CanonicalJson.loads(receipt_dict["sig_payload"])
+
+        meta = {
+            "request_id": request_id,
+            "cached": False, # Naive assumption, store handles idempotency but doesn't signal 'cached'
+            "ts": int(time.time()),
+            "processing_time_ms": int((time.perf_counter() - start) * 1000),
+            "receipt_hash": receipt_hash(sig_payload_obj, receipt_dict["signature"]),
+            "protocol": "AttestGrid/v0.2.0-pre",
+        }
+
+        return {
+            "receipt": receipt_dict,
+            "proof": None,
+            "meta": meta
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
