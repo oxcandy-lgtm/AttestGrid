@@ -61,6 +61,14 @@ class ReceiptMeta(BaseModel):
     receipt_hash: str
     protocol: str = "AttestGrid/v0.2.0-pre"
 
+class VerifyRequest(BaseModel):
+    receipt: Dict[str, Any]
+
+class VerifyResponse(BaseModel):
+    valid: bool
+    reason: Optional[str] = None
+    receipt_hash: Optional[str] = None
+
 class AttestationResponse(BaseModel):
     receipt: ReceiptModel
     proof: Optional[Dict[str, Any]] = None
@@ -110,6 +118,72 @@ async def get_public_key():
         raise HTTPException(status_code=500, detail="Keys not initialized")
     with open(PUBLIC_KEY_FILE, "r") as f:
         return {"public_key_hex": f.read().strip()}
+
+@app.post("/v1/verify", response_model=VerifyResponse)
+async def verify_receipt(req: VerifyRequest):
+    """
+    Verifies a receipt against this node's public key.
+    Checks signature validity and returns a stable receipt_hash.
+    """
+    try:
+        receipt = req.receipt
+        
+        # 1. Extract signature components
+        sig_payload = receipt.get("sig_payload")
+        # Support both 'signature' (internal model) and 'sig' (user requested alias)
+        sig_hex = receipt.get("signature") or receipt.get("sig")
+
+        if not isinstance(sig_payload, (dict, str)) or not isinstance(sig_hex, str):
+            return VerifyResponse(valid=False, reason="missing_sig_payload_or_sig")
+
+        # If payload is string (escaped JSON), load it. If dict, use as is.
+        # The store saves it as string in python, but over API it might be dict or string depending on how it was serialized in receipt.
+        # existing 'attest' returns 'receipt' with 'sig_payload' as STRING (JSON).
+        # But if client sends it back as JSON object, we handle both.
+        if isinstance(sig_payload, str):
+            try:
+                sig_payload_obj = CanonicalJson.loads(sig_payload)
+                sig_payload_str = sig_payload
+            except:
+                return VerifyResponse(valid=False, reason="malformed_sig_payload_string")
+        else:
+            sig_payload_obj = sig_payload
+            sig_payload_str = CanonicalJson.dumps(sig_payload_obj)
+
+        # 2. Sanity Checks (Optional)
+        node_id = receipt.get("node_id")
+        logic_version = receipt.get("logic_version")
+        
+        if node_id and node_id != NODE_ID:
+            return VerifyResponse(valid=False, reason="node_id_mismatch")
+        
+        # 3. Verify Signature
+        # Need public key
+        if not os.path.exists(PUBLIC_KEY_FILE):
+             return VerifyResponse(valid=False, reason="node_keys_missing")
+             
+        with open(PUBLIC_KEY_FILE, "r") as f:
+            pub_hex = f.read().strip()
+            
+        # Reconstruct message exactly as signed
+        # The signature is over CanonicalJson.dumps(sig_payload_obj)
+        # Which is exactly sig_payload_str if we normalized it correctly.
+        # To be safe, always re-canonicalize from the object form.
+        msg_to_verify = CanonicalJson.dumps(sig_payload_obj)
+        
+        is_valid = Ed25519Signer.verify(sig_hex, msg_to_verify, pub_hex)
+        
+        if not is_valid:
+            return VerifyResponse(valid=False, reason="invalid_signature")
+            
+        # 4. Success -> Return Hash
+        # Calculate receipt hash using the helper
+        r_hash = receipt_hash(sig_payload_obj, sig_hex)
+        
+        return VerifyResponse(valid=True, receipt_hash=r_hash)
+
+    except Exception as e:
+        return VerifyResponse(valid=False, reason=f"exception: {str(e)}")
 
 @app.post("/v1/attest", response_model=AttestationResponse)
 async def attest(req: AttestRequest):

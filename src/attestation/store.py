@@ -45,7 +45,17 @@ class ReceiptStore:
             cursor = conn.execute("SELECT * FROM receipts WHERE task_id = ?", (task_id,))
             row = cursor.fetchone()
             if row:
-                return dict(row)
+                d = dict(row)
+                # Deserialize JSON fields
+                try:
+                    d['validator_errors'] = CanonicalJson.loads(d['validator_errors'])
+                    d['result'] = CanonicalJson.loads(d['result'])
+                    d['validator_passed'] = bool(d['validator_passed'])
+                except Exception:
+                    # Fallback or log error? For now, let it fail or return raw?
+                    # If data is corrupt, maybe better to fail.
+                    pass
+                return d
             return None
 
     def store_receipt(

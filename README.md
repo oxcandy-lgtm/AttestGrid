@@ -124,6 +124,28 @@ The signature matches the payload. The receipt is authentic.
 You do not need to trust the server.
 Verification is purely mathematical.
 
+
+### Step 3 — Verify via API (v0.2.0)
+You can also verify a receipt using the node's verification endpoint.
+This checks the signature against the node's public key and returns a stable receipt hash.
+
+```bash
+curl -s -X POST "http://localhost:8000/v1/verify" \
+  -H "Content-Type: application/json" \
+  -d @- <<'JSON'
+{
+  "receipt": { ... your receipt object ... }
+}
+JSON
+```
+Response:
+```json
+{
+  "valid": true,
+  "receipt_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}
+```
+
 ## What This Enables
 - Detect hallucinated structured outputs
 - Prevent silent pipeline corruption

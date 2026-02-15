@@ -10,3 +10,4 @@ venv/
 .DS_Store
 receipts.db
 .keys/
+.venv/
