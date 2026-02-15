@@ -7,6 +7,16 @@ It prevents silent corruption, retry loops, and unverifiable LLM outputs.
 ## Why?
 LLM outputs are probabilistic.
 
+> This node is self-auditing: stats are generated from real receipts and verifications.
+
+<!-- ATTESTGRID_STATS_START -->
+**Live stats (auto-updated):**
+- Total Receipts: **7**
+- Verifications: **5**
+- Blocked (passed:false): **0**
+- Block rate: **0.000**
+<!-- ATTESTGRID_STATS_END -->
+
 They may:
 - Produce structurally valid JSON with incorrect data
 - Hallucinate addresses, IDs, or entities
