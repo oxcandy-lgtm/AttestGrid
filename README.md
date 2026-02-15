@@ -146,6 +146,16 @@ Response:
 }
 ```
 
+## Public transparency endpoint
+
+This node exposes public stats for auditability:
+
+```bash
+curl -s http://localhost:8000/v1/stats | jq
+```
+
+**Current status:** Total Receipts: `/v1/stats.receipts_total` | Blocked (passed:false): `/v1/stats.passed_false`
+
 ## What This Enables
 - Detect hallucinated structured outputs
 - Prevent silent pipeline corruption

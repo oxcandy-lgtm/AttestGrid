@@ -3,6 +3,7 @@ import time
 import json
 from typing import Optional, Dict, Any, List
 from .canonical_json import CanonicalJson
+from collections import Counter
 
 class ReceiptStore:
     """
@@ -101,3 +102,59 @@ class ReceiptStore:
                 created_at
             ))
             conn.commit()
+
+    def get_aggregated_stats(self, reasons_sample_limit: int = 500) -> Dict[str, Any]:
+        """
+        Compute aggregated statistics for transparency.
+        """
+        # totals
+        with sqlite3.connect(self.db_path) as con:
+            con.row_factory = sqlite3.Row
+
+            row = con.execute("""
+                SELECT 
+                  COUNT(*) AS total,
+                  SUM(CASE WHEN validator_passed = 1 THEN 1 ELSE 0 END) AS passed_true,
+                  SUM(CASE WHEN validator_passed = 0 THEN 1 ELSE 0 END) AS passed_false
+                FROM receipts
+            """).fetchone()
+
+            total = int(row["total"] or 0)
+            passed_true = int(row["passed_true"] or 0)
+            passed_false = int(row["passed_false"] or 0)
+
+            # sample reasons (good enough for v0.2)
+            rows = con.execute("""
+                SELECT validator_errors
+                FROM receipts 
+                WHERE validator_passed = 0
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (reasons_sample_limit,)).fetchall()
+
+        counter: Counter[str] = Counter()
+        for r in rows:
+            try:
+                # Handle both string (JSON) and potentially pre-parsed if row_factory did magic (it won't here)
+                val = r["validator_errors"]
+                if isinstance(val, str):
+                    errs = json.loads(val)
+                else:
+                    errs = val or []
+                
+                if isinstance(errs, list):
+                    for e in errs:
+                        # keep reason compact / stable
+                        if isinstance(e, str) and e:
+                            counter[e] += 1
+            except Exception:
+                counter["errors_parse_failed"] += 1
+
+        top_reasons = counter.most_common(10)
+
+        return {
+            "total": total,
+            "passed_true": passed_true,
+            "passed_false": passed_false,
+            "top_reasons": top_reasons,
+        }

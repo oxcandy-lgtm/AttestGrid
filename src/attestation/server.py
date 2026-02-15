@@ -8,7 +8,13 @@ from .crypto import Ed25519Signer
 from .store import ReceiptStore
 from .canonical_json import CanonicalJson
 import hashlib
+import hashlib
 import time
+from threading import Lock
+
+START_TIME = time.time()
+_verify_total = 0
+_verify_lock = Lock()
 
 # --- Configuration ---
 KEYS_DIR = ".keys"
@@ -126,6 +132,10 @@ async def verify_receipt(req: VerifyRequest):
     Checks signature validity and returns a stable receipt_hash.
     """
     try:
+        global _verify_total
+        with _verify_lock:
+            _verify_total += 1
+
         receipt = req.receipt
         
         # 1. Extract signature components
@@ -231,6 +241,30 @@ async def attest(req: AttestRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/v1/stats")
+async def stats():
+    db_stats = node.store.get_aggregated_stats()
+
+    uptime = int(time.time() - START_TIME)
+    total = db_stats["total"]
+    passed_false = db_stats["passed_false"]
+
+    with _verify_lock:
+        v_total = _verify_total
+
+    return {
+        "node_id": NODE_ID,
+        "logic_version": node.logic_version,
+        "uptime_sec": uptime,
+        "receipts_total": total,
+        "verify_total": v_total,
+        "passed_true": db_stats["passed_true"],
+        "passed_false": passed_false,
+        "passed_false_rate": round((passed_false / total), 3) if total > 0 else 0.0,
+        "top_false_reasons": db_stats["top_reasons"],
+        "protocol": "AttestGrid/v0.2.1-pre",
+    }
 
 if __name__ == "__main__":
     import uvicorn
