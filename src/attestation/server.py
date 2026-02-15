@@ -118,12 +118,19 @@ def startup_event():
 @app.get("/v1/node/public-key")
 async def get_public_key():
     """
-    Returns the public key in hex format.
+    Returns the public key in hex format along with node identity.
     """
     if not os.path.exists(PUBLIC_KEY_FILE):
         raise HTTPException(status_code=500, detail="Keys not initialized")
+    
     with open(PUBLIC_KEY_FILE, "r") as f:
-        return {"public_key_hex": f.read().strip()}
+        pub_hex = f.read().strip()
+        
+    return {
+        "node_id": NODE_ID,
+        "logic_version": node.logic_version if node else "unknown",
+        "public_key_hex": pub_hex
+    }
 
 @app.post("/v1/verify", response_model=VerifyResponse)
 async def verify_receipt(req: VerifyRequest):

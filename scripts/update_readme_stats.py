@@ -6,7 +6,7 @@ import urllib.request
 import re
 
 # Configuration
-STATS_URL = os.getenv("ATTESTGRID_STATS_URL", "http://127.0.0.1:8000/v1/stats")
+STATS_URL = os.getenv("ATTESTGRID_STATS_URL", "https://veridict.matrix.jp/v1/stats")
 README_PATH = "README.md"
 
 def fetch_stats():

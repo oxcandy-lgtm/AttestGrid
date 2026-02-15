@@ -1,6 +1,9 @@
 # Deterministic Attestation Node
 The Trust Layer for AI agents.
 
+**Public Node:** https://veridict.matrix.jp  
+**Live Stats:** https://veridict.matrix.jp/v1/stats
+
 This node provides deterministic, signed, and verifiable receipts for structured task execution.
 It prevents silent corruption, retry loops, and unverifiable LLM outputs.
 
@@ -11,10 +14,10 @@ LLM outputs are probabilistic.
 
 <!-- ATTESTGRID_STATS_START -->
 **Live stats (auto-updated):**
-- Total Receipts: **7**
-- Verifications: **5**
-- Blocked (passed:false): **0**
-- Block rate: **0.000**
+- Total Receipts: **27**
+- Verifications: **0**
+- Blocked (passed:false): **10**
+- Block rate: **0.370**
 <!-- ATTESTGRID_STATS_END -->
 
 They may:
