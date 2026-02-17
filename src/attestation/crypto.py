@@ -11,7 +11,7 @@ except Exception:
     _HAS_CRYPTOGRAPHY = False
 
 try:
-    import ed25519 as _pure_ed
+    import pure25519.ed25519_oop as _pure_ed
     _HAS_PURE_ED = True
 except Exception:
     _HAS_PURE_ED = False
@@ -19,7 +19,7 @@ except Exception:
 class Ed25519Signer:
     """
     Wrapper for Ed25519 signing and verification.
-    Automatically chooses between 'cryptography' (fast) and 'ed25519' (pure python fallback).
+    Automatically chooses between 'cryptography' (fast) and 'pure25519' (pure python fallback).
     Uses raw 32-byte hex strings for key storage.
     """
 
