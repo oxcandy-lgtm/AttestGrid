@@ -13,16 +13,18 @@ ssh "$REMOTE_HOST" "bash -s" << EOF
     echo "📂 Navigating to $REMOTE_DIR..."
     cd "$REMOTE_DIR"
 
-    echo "📥 Pulling latest code..."
-    git pull origin main --tags
-
+    echo "� Checking environment..."
+    python3 --version || echo "python3 not found"
+    
     if [ ! -d ".venv" ]; then
         echo "📦 Creating virtual environment..."
         python3 -m venv .venv
     fi
 
-    echo "⚙️  Installing/Updating dependencies..."
-    .venv/bin/pip install --upgrade pip
+    echo "⚙️  Upgrading base tools (pip, setuptools, wheel)..."
+    .venv/bin/pip install --upgrade pip setuptools wheel
+
+    echo "⚙️  Installing dependencies..."
     .venv/bin/pip install cryptography fastapi uvicorn pydantic
 
     echo "🔄 Restarting application..."
