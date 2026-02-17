@@ -1,53 +1,80 @@
 import os
 import binascii
-from cryptography.hazmat.primitives.asymmetric import ed25519
-from cryptography.exceptions import InvalidSignature
+
+# --- Backend Selection ---
+try:
+    from cryptography.hazmat.primitives.asymmetric import ed25519 as _crypto_ed
+    from cryptography.hazmat.primitives import serialization as _crypto_ser
+    from cryptography.exceptions import InvalidSignature as _CryptoInvalidSignature
+    _HAS_CRYPTOGRAPHY = True
+except Exception:
+    _HAS_CRYPTOGRAPHY = False
+
+try:
+    import ed25519 as _pure_ed
+    _HAS_PURE_ED = True
+except Exception:
+    _HAS_PURE_ED = False
 
 class Ed25519Signer:
     """
     Wrapper for Ed25519 signing and verification.
-    Uses raw 32-byte hex strings for key storage to keep things simple.
+    Automatically chooses between 'cryptography' (fast) and 'ed25519' (pure python fallback).
+    Uses raw 32-byte hex strings for key storage.
     """
 
     def __init__(self, private_key_hex: str = None):
         """
         Initialize with an optional private key hex string.
-        If None, no signing capability (verification only, if pubkey provided later).
         """
-        self._private_key = None
-        if private_key_hex:
-            private_bytes = binascii.unhexlify(private_key_hex)
-            self._private_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_bytes)
+        self._private_key_hex = private_key_hex
 
     @property
     def public_key_hex(self) -> str:
         """Returns the public key in hex format."""
-        if not self._private_key:
+        if not self._private_key_hex:
             raise ValueError("No private key loaded.")
-        public_key = self._private_key.public_key()
-        public_bytes = public_key.public_bytes(
-            encoding=lambda: b'', # Hack to get raw bytes? No, wait.
-            # Ed25519 public keys are just bytes.
-            # cryptography library requires serialization format.
-            # Let's use Raw encoding if available or standard SubjectPublicKeyInfo
-        )
-        # Actually for Ed25519 in 'cryptography', public_bytes can utilize Raw format
-        from cryptography.hazmat.primitives import serialization
-        public_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw
-        )
-        return binascii.hexlify(public_bytes).decode('utf-8')
+        
+        # We store keys as hex. Let's derive public key based on available backend.
+        priv_bytes = binascii.unhexlify(self._private_key_hex)
+        
+        if _HAS_CRYPTOGRAPHY:
+            sk = _crypto_ed.Ed25519PrivateKey.from_private_bytes(priv_bytes)
+            pk = sk.public_key()
+            public_bytes = pk.public_bytes(
+                encoding=_crypto_ser.Encoding.Raw,
+                format=_crypto_ser.PublicFormat.Raw
+            )
+            return binascii.hexlify(public_bytes).decode('utf-8')
+        
+        if _HAS_PURE_ED:
+            sk = _pure_ed.SigningKey(priv_bytes)
+            public_bytes = sk.get_verifying_key().to_bytes()
+            return binascii.hexlify(public_bytes).decode('utf-8')
+            
+        raise RuntimeError("No ed25519 backend available. Install 'ed25519' or 'cryptography'.")
 
     def sign(self, message: str) -> str:
         """
         Sign a text message (UTF-8). Returns signature as hex string.
         """
-        if not self._private_key:
+        if not self._private_key_hex:
             raise ValueError("Signing capability requires a private key.")
         
-        signature_bytes = self._private_key.sign(message.encode('utf-8'))
-        return binascii.hexlify(signature_bytes).decode('utf-8')
+        msg_bytes = message.encode('utf-8')
+        priv_bytes = binascii.unhexlify(self._private_key_hex)
+        
+        if _HAS_CRYPTOGRAPHY:
+            sk = _crypto_ed.Ed25519PrivateKey.from_private_bytes(priv_bytes)
+            signature_bytes = sk.sign(msg_bytes)
+            return binascii.hexlify(signature_bytes).decode('utf-8')
+            
+        if _HAS_PURE_ED:
+            sk = _pure_ed.SigningKey(priv_bytes)
+            signature_bytes = sk.sign(msg_bytes)
+            return binascii.hexlify(signature_bytes).decode('utf-8')
+
+        raise RuntimeError("No ed25519 backend available.")
 
     @staticmethod
     def verify(signature_hex: str, message: str, public_key_hex: str) -> bool:
@@ -55,13 +82,28 @@ class Ed25519Signer:
         Verify a signature against a message and public key.
         """
         try:
-            public_bytes = binascii.unhexlify(public_key_hex)
-            signature_bytes = binascii.unhexlify(signature_hex)
+            pub_bytes = binascii.unhexlify(public_key_hex)
+            sig_bytes = binascii.unhexlify(signature_hex)
+            msg_bytes = message.encode('utf-8')
             
-            public_key = ed25519.Ed25519PublicKey.from_public_bytes(public_bytes)
-            public_key.verify(signature_bytes, message.encode('utf-8'))
-            return True
-        except (InvalidSignature, binascii.Error, ValueError):
+            if _HAS_CRYPTOGRAPHY:
+                try:
+                    pk = _crypto_ed.Ed25519PublicKey.from_public_bytes(pub_bytes)
+                    pk.verify(sig_bytes, msg_bytes)
+                    return True
+                except _CryptoInvalidSignature:
+                    return False
+            
+            if _HAS_PURE_ED:
+                try:
+                    vk = _pure_ed.VerifyingKey(pub_bytes)
+                    vk.verify(sig_bytes, msg_bytes)
+                    return True
+                except _pure_ed.BadSignatureError:
+                    return False
+                    
+            raise RuntimeError("No ed25519 backend available.")
+        except (binascii.Error, ValueError, RuntimeError):
             return False
 
     @staticmethod
@@ -70,24 +112,29 @@ class Ed25519Signer:
         Generate a new random key pair.
         Returns (private_key_hex, public_key_hex).
         """
-        private_key = ed25519.Ed25519PrivateKey.generate()
-        
-        # Get private bytes (Raw)
-        from cryptography.hazmat.primitives import serialization
-        private_bytes = private_key.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption()
-        )
-        
-        # Get public bytes (Raw)
-        public_key = private_key.public_key()
-        public_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw
-        )
-        
-        return (
-            binascii.hexlify(private_bytes).decode('utf-8'),
-            binascii.hexlify(public_bytes).decode('utf-8')
-        )
+        if _HAS_CRYPTOGRAPHY:
+            sk = _crypto_ed.Ed25519PrivateKey.generate()
+            pk = sk.public_key()
+            
+            priv_bytes = sk.private_bytes(
+                encoding=_crypto_ser.Encoding.Raw,
+                format=_crypto_ser.PrivateFormat.Raw,
+                encryption_algorithm=_crypto_ser.NoEncryption()
+            )
+            pub_bytes = pk.public_bytes(
+                encoding=_crypto_ser.Encoding.Raw,
+                format=_crypto_ser.PublicFormat.Raw
+            )
+            return (
+                binascii.hexlify(priv_bytes).decode('utf-8'),
+                binascii.hexlify(pub_bytes).decode('utf-8')
+            )
+            
+        if _HAS_PURE_ED:
+            sk, vk = _pure_ed.create_keypair()
+            return (
+                binascii.hexlify(sk.to_bytes()).decode('utf-8'),
+                binascii.hexlify(vk.to_bytes()).decode('utf-8')
+            )
+
+        raise RuntimeError("No ed25519 backend available.")

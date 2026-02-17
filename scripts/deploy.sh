@@ -42,18 +42,12 @@ ssh "$REMOTE_HOST" "bash -s" -- "$REMOTE_DIR" "$SERVICE_PORT" << 'EOF'
     echo "⚙️  Upgrading base tools (pip, setuptools, wheel)..."
     .venv/bin/pip install --upgrade pip setuptools wheel
 
-    echo "⚙️  Installing dependencies..."
-    # Try with --prefer-binary first. If it's an old Python, we might need --only-binary to avoid build hell.
-    if [[ "$PY_VER" == "3.8" ]]; then
-        echo "⚠️  Old Python detected. Forcing binary-only and legacy compatibility."
-        # cryptography 3.4.8 is the last version without Rust requirement for easier fallback, 
-        # but let's try to just get a binary wheel for something slightly newer if possible.
-        # Pinning pydantic < 2 to avoid pydantic-core build issues on old systems.
-        .venv/bin/pip install --only-binary=:all: "cryptography<40.0" "pydantic<2.0" fastapi uvicorn || \
-        .venv/bin/pip install --prefer-binary "cryptography<35.0" "pydantic<2.0" fastapi uvicorn
-    else
-        .venv/bin/pip install --prefer-binary cryptography fastapi uvicorn pydantic
-    fi
+    echo "⚙️  Installing core dependencies from requirements.txt..."
+    .venv/bin/pip install --no-cache-dir -r requirements.txt
+
+    echo "⚙️  Attempting to install optional cryptography for performance..."
+    # This might fail on shared servers, which is OK because we have the fallback.
+    .venv/bin/pip install -r requirements-crypto.txt || echo "⚠️  Could not install cryptography. Using pure-Python fallback."
 
     echo "🔄 Restarting application..."
     # Kill existing uvicorn process if running, ignore error if not found

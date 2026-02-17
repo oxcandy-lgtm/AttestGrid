@@ -7,6 +7,9 @@ The Trust Layer for AI agents.
 This node provides deterministic, signed, and verifiable receipts for structured task execution.
 It prevents silent corruption, retry loops, and unverifiable LLM outputs.
 
+> [!NOTE]
+> On shared hosting, we use the pure-Python `ed25519` backend by default. `cryptography` is optional for performance.
+
 ## Why?
 LLM outputs are probabilistic.
 
