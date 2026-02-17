@@ -19,13 +19,15 @@ ssh "$REMOTE_HOST" "bash -s" -- "$REMOTE_DIR" "$SERVICE_PORT" << 'EOF'
     git pull origin main --tags
 
     echo "🔍 Checking environment..."
-    # Sakura shared servers often have multiple python versions. 
-    # Try to find a modern one (3.9 - 3.12). Some use dots, some don't.
+    # Sakura shared servers often have multiple python versions in /usr/local/bin.
     PYTHON_CMD="python3"
-    for cmd in python3.12 python3.11 python3.10 python3.9 python311 python310 python39; do
-        if command -v "$cmd" >/dev/null 2>&1; then
+    for cmd in "/usr/local/bin/python3.11" "/usr/local/bin/python3.10" "/usr/local/bin/python3.9" python3.11 python3.10 python3.9 python3; do
+        if [ -x "$cmd" ] || command -v "$cmd" >/dev/null 2>&1; then
             PYTHON_CMD="$cmd"
-            break
+            # Ensure it actually works
+            if $PYTHON_CMD --version >/dev/null 2>&1; then
+                break
+            fi
         fi
     done
     
@@ -41,11 +43,14 @@ ssh "$REMOTE_HOST" "bash -s" -- "$REMOTE_DIR" "$SERVICE_PORT" << 'EOF'
     .venv/bin/pip install --upgrade pip setuptools wheel
 
     echo "⚙️  Installing dependencies..."
-    # If Python is < 3.9, we need to pin cryptography to a version that supports it.
-    # Also using --prefer-binary to avoid building from source on shared hosts.
+    # Try with --prefer-binary first. If it's an old Python, we might need --only-binary to avoid build hell.
     if [[ "$PY_VER" == "3.8" ]]; then
-        echo "⚠️  Old Python detected. Pinning cryptography<44.0.0"
-        .venv/bin/pip install --prefer-binary "cryptography<44.0.0" fastapi uvicorn pydantic
+        echo "⚠️  Old Python detected. Forcing binary-only and legacy compatibility."
+        # cryptography 3.4.8 is the last version without Rust requirement for easier fallback, 
+        # but let's try to just get a binary wheel for something slightly newer if possible.
+        # Pinning pydantic < 2 to avoid pydantic-core build issues on old systems.
+        .venv/bin/pip install --only-binary=:all: "cryptography<40.0" "pydantic<2.0" fastapi uvicorn || \
+        .venv/bin/pip install --prefer-binary "cryptography<35.0" "pydantic<2.0" fastapi uvicorn
     else
         .venv/bin/pip install --prefer-binary cryptography fastapi uvicorn pydantic
     fi
