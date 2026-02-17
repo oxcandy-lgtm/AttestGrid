@@ -16,6 +16,15 @@ ssh "$REMOTE_HOST" "bash -s" << EOF
     echo "📥 Pulling latest code..."
     git pull origin main --tags
 
+    if [ ! -d ".venv" ]; then
+        echo "📦 Creating virtual environment..."
+        python3 -m venv .venv
+    fi
+
+    echo "⚙️  Installing/Updating dependencies..."
+    .venv/bin/pip install --upgrade pip
+    .venv/bin/pip install cryptography fastapi uvicorn pydantic
+
     echo "🔄 Restarting application..."
     # Kill existing uvicorn process if running, ignore error if not found
     pkill -f uvicorn || true
