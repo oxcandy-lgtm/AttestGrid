@@ -8,7 +8,9 @@ SERVICE_PORT="${SERVICE_PORT:-8000}"
 
 echo "🚀 Deploying to $REMOTE_HOST:$REMOTE_DIR..."
 
-ssh "$REMOTE_HOST" "bash -s" << EOF
+ssh "$REMOTE_HOST" "bash -s" -- "$REMOTE_DIR" "$SERVICE_PORT" << 'EOF'
+    REMOTE_DIR="$1"
+    SERVICE_PORT="$2"
     set -e
     echo "📂 Navigating to $REMOTE_DIR..."
     cd "$REMOTE_DIR"
