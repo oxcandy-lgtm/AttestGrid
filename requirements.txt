@@ -1,4 +1,4 @@
-fastapi
-uvicorn
-pydantic
-pure25519
+fastapi<0.100
+pydantic<2
+uvicorn<0.24
+pure25519==0.0.1

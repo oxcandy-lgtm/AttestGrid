@@ -34,20 +34,22 @@ ssh "$REMOTE_HOST" "bash -s" -- "$REMOTE_DIR" "$SERVICE_PORT" << 'EOF'
     PY_VER=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
     echo "📌 Using Python command: $PYTHON_CMD (Python $PY_VER)"
     
-    if [ ! -d ".venv" ]; then
-        echo "📦 Creating virtual environment using $PYTHON_CMD..."
-        $PYTHON_CMD -m venv .venv
-    fi
+    # Force fresh venv to avoid dependency mix-ups
+    echo "🧹 Cleaning old virtual environment..."
+    rm -rf .venv
+    
+    echo "📦 Creating fresh virtual environment using $PYTHON_CMD..."
+    $PYTHON_CMD -m venv .venv
 
-    echo "⚙️  Upgrading base tools (pip, setuptools, wheel)..."
-    .venv/bin/pip install --upgrade pip setuptools wheel
+    echo "⚙️  Upgrading base tools (pip)..."
+    .venv/bin/pip install --upgrade pip
 
     echo "⚙️  Installing core dependencies from requirements.txt..."
     .venv/bin/pip install --no-cache-dir -r requirements.txt
 
     echo "⚙️  Attempting to install optional cryptography for performance..."
     # This might fail on shared servers, which is OK because we have the fallback.
-    .venv/bin/pip install -r requirements-crypto.txt || echo "⚠️  Could not install cryptography. Using pure-Python fallback."
+    .venv/bin/pip install --no-cache-dir -r requirements-crypto.txt || echo "⚠️  Could not install cryptography. Using pure-Python fallback."
 
     echo "🔄 Restarting application..."
     # Kill existing uvicorn process if running, ignore error if not found
