@@ -13,7 +13,10 @@ ssh "$REMOTE_HOST" "bash -s" << EOF
     echo "📂 Navigating to $REMOTE_DIR..."
     cd "$REMOTE_DIR"
 
-    echo "� Checking environment..."
+    echo "📥 Pulling latest code..."
+    git pull origin main --tags
+
+    echo "🔍 Checking environment..."
     python3 --version || echo "python3 not found"
     
     if [ ! -d ".venv" ]; then
