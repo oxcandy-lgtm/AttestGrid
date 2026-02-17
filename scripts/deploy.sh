@@ -17,11 +17,21 @@ ssh "$REMOTE_HOST" "bash -s" << EOF
     git pull origin main --tags
 
     echo "🔍 Checking environment..."
-    python3 --version || echo "python3 not found"
+    # Sakura shared servers often have multiple python versions. 
+    # Try to find a modern one (3.10 or 3.11+)
+    PYTHON_CMD="python3"
+    for cmd in python3.11 python3.10 python3.9; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            PYTHON_CMD="$cmd"
+            break
+        fi
+    done
+    
+    echo "📌 Using Python command: $PYTHON_CMD ($($PYTHON_CMD --version))"
     
     if [ ! -d ".venv" ]; then
-        echo "📦 Creating virtual environment..."
-        python3 -m venv .venv
+        echo "📦 Creating virtual environment using $PYTHON_CMD..."
+        $PYTHON_CMD -m venv .venv
     fi
 
     echo "⚙️  Upgrading base tools (pip, setuptools, wheel)..."
