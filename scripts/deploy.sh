@@ -20,16 +20,17 @@ ssh "$REMOTE_HOST" "bash -s" -- "$REMOTE_DIR" "$SERVICE_PORT" << 'EOF'
 
     echo "🔍 Checking environment..."
     # Sakura shared servers often have multiple python versions. 
-    # Try to find a modern one (3.10 or 3.11+)
+    # Try to find a modern one (3.9 - 3.12). Some use dots, some don't.
     PYTHON_CMD="python3"
-    for cmd in python3.11 python3.10 python3.9; do
+    for cmd in python3.12 python3.11 python3.10 python3.9 python311 python310 python39; do
         if command -v "$cmd" >/dev/null 2>&1; then
             PYTHON_CMD="$cmd"
             break
         fi
     done
     
-    echo "📌 Using Python command: $PYTHON_CMD ($($PYTHON_CMD --version))"
+    PY_VER=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    echo "📌 Using Python command: $PYTHON_CMD (Python $PY_VER)"
     
     if [ ! -d ".venv" ]; then
         echo "📦 Creating virtual environment using $PYTHON_CMD..."
@@ -40,7 +41,14 @@ ssh "$REMOTE_HOST" "bash -s" -- "$REMOTE_DIR" "$SERVICE_PORT" << 'EOF'
     .venv/bin/pip install --upgrade pip setuptools wheel
 
     echo "⚙️  Installing dependencies..."
-    .venv/bin/pip install cryptography fastapi uvicorn pydantic
+    # If Python is < 3.9, we need to pin cryptography to a version that supports it.
+    # Also using --prefer-binary to avoid building from source on shared hosts.
+    if [[ "$PY_VER" == "3.8" ]]; then
+        echo "⚠️  Old Python detected. Pinning cryptography<44.0.0"
+        .venv/bin/pip install --prefer-binary "cryptography<44.0.0" fastapi uvicorn pydantic
+    else
+        .venv/bin/pip install --prefer-binary cryptography fastapi uvicorn pydantic
+    fi
 
     echo "🔄 Restarting application..."
     # Kill existing uvicorn process if running, ignore error if not found
