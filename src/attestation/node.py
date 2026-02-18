@@ -1,6 +1,7 @@
+import os
 import hashlib
 import json
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 from .canonical_json import CanonicalJson
 from .crypto import Ed25519Signer
 from .store import ReceiptStore
@@ -13,15 +14,15 @@ class AttestationNode:
 
     def __init__(
         self,
-        node_id: str,
         signer: Ed25519Signer,
         store: ReceiptStore,
-        logic_version: str = "1.0.0"
+        node_id: Optional[str] = None,
+        logic_version: Optional[str] = None
     ):
-        self.node_id = node_id
+        self.node_id = node_id or os.getenv("NODE_ID", "default-node")
+        self.logic_version = logic_version or os.getenv("LOGIC_VERSION", "0.2.1-pre")
         self.signer = signer
         self.store = store
-        self.logic_version = logic_version
 
     def _hash(self, data: Any) -> str:
         """

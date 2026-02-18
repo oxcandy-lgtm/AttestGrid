@@ -107,7 +107,6 @@ def startup_event():
     store = ReceiptStore(DB_PATH)
     
     node = AttestationNode(
-        node_id=NODE_ID,
         signer=signer,
         store=store
     )
