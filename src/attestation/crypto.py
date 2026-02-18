@@ -1,5 +1,6 @@
 import os
 import binascii
+from typing import Tuple, Optional
 
 # --- Backend Selection ---
 try:
@@ -107,7 +108,7 @@ class Ed25519Signer:
             return False
 
     @staticmethod
-    def generate_key_pair() -> tuple[str, str]:
+    def generate_key_pair() -> Tuple[str, str]:
         """
         Generate a new random key pair.
         Returns (private_key_hex, public_key_hex).

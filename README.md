@@ -1,6 +1,8 @@
 # Deterministic Attestation Node
 The Trust Layer for AI agents.
 
+Supports Python 3.8+ (shared hosting friendly).
+
 **Public Node:** https://veridict.matrix.jp  
 **Live Stats:** https://veridict.matrix.jp/v1/stats
 
